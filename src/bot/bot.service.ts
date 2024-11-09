@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Like, Repository } from 'typeorm';
 import { Song } from './entity/song.entity';
+import { Markup } from 'telegraf';
 
 @Injectable()
 export class BotService {
@@ -59,7 +60,6 @@ export class BotService {
             url: song.url,
           });
           await this.songRepository.save(songEntity);
-          // console.log('bazaga yozildi');
         }
 
         const artistsString = artists.join('');
@@ -72,5 +72,64 @@ export class BotService {
       return undefined;
     }
   }
-  
+
+  async retunInfo(userInput: string, page: number) {
+    try {
+      const result = await this.fetchApi(userInput, page);
+
+      if (!result || result === 'false') {
+        return [];
+      }
+
+      const items = result
+        .split(' \n\n')
+        .map((item) => {
+          if (!item) return;
+
+          const [id, artist, title, url] = item.split(' 123., ');
+
+          return {
+            id: id,
+            artist: artist,
+            title: title,
+            url: url,
+          };
+        })
+        .filter(Boolean);
+
+      return items;
+    } catch (error) {
+      console.error('Error in retunInfo method:', error);
+      return [];
+    }
+  }
+
+  async pushButton(
+    items: { id: number; artist: string; title: string; url: string }[],
+    musicListPage: number,
+  ): Promise<[string, any[]]> {
+    const music_btn = [];
+    const buttonsPerRow = 5;
+
+    for (let index = 0; index < items.length; index += buttonsPerRow) {
+      const rowButtons = items
+        .slice(index, index + buttonsPerRow)
+        .map((item) => Markup.button.callback(`${item.id}`, `action_${item.id}`));
+
+      music_btn.push(rowButtons);
+    }
+
+    if (items.length == 20) {
+      music_btn.push([
+        Markup.button.callback('⬅️', `page_${musicListPage - 1}`),
+        Markup.button.callback('➡️', `page_${musicListPage + 1}`),
+      ]);
+    }
+
+    const reqMusicList = items
+      .map((item) => `${item.id}. ${item.artist} - ${item.title}`)
+      .join('\n');
+
+    return [reqMusicList, music_btn];
+  }
 }

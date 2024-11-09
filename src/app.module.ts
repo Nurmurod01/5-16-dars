@@ -6,8 +6,6 @@ import * as LocalSession from 'telegraf-session-local';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Song } from './bot/entity/song.entity';
 
-const sessions = new LocalSession({ database: 'session.db.json' });
-
 @Module({
   imports: [
     BotModule,
@@ -22,7 +20,6 @@ const sessions = new LocalSession({ database: 'session.db.json' });
       entities: [Song],
     }),
     TelegrafModule.forRoot({
-      // middlewares: [sessions.middleware()],
       token: '7860537454:AAEcIGPq43x6vwlWYEC1q6SCuPE2bEyL-7A',
     }),
   ],

@@ -1,6 +1,7 @@
 import { BotService } from './bot.service';
 import { InjectBot, Start, Update, On, Action } from 'nestjs-telegraf';
 import { Context, Markup, Telegraf } from 'telegraf';
+import { MyCustomLoggerService } from '../logger/logger.service'; // Import the custom logger
 
 interface Item {
   id: string;
@@ -14,6 +15,13 @@ const userItemsMap = new Map<string, Item[]>();
 @Update()
 export class BotUpdate {
   musicListPage = 1;
+  items;
+  errLogGroupID = -4513464624;
+  unfind = `Afsuski, hech narsa topilmadi.😕`;
+  errMsg = `Xato malumot botni qayta yurgazish uchun /start buyrugini bering😊.`;
+  helloMsg = `Salom, \nQanaqa musiqa eshitishni xoxlaysiz 🔎`;
+  private readonly logger = new MyCustomLoggerService();
+
   constructor(
     @InjectBot() private readonly bot: Telegraf<Context>,
     private readonly botService: BotService,
@@ -21,112 +29,122 @@ export class BotUpdate {
 
   @Start()
   async startBot(ctx: Context) {
-    await ctx.reply('Salom, \nQanaqa musiqa eshitishni xoxlaysiz 🔎');
+    this.bot.telegram.setMyCommands([
+      { command: 'start', description: 'Botni boshlash' },
+    ]);
+    try {
+      await ctx.reply(this.helloMsg);
+    } catch (error) {
+      await ctx.telegram.sendMessage(
+        this.errLogGroupID,
+        `Error in handleText method: ${error}`,
+      );
+
+      ctx.reply('Xatolik yuz berdi. Iltimos, qaytadan urining.');
+    }
   }
 
   @On('text')
   async handleText(ctx: any, page: number = 1) {
-    if (ctx.message.text) {
-      const userInput = ctx.message.text;
-      const userId = String(ctx.from.id);
-
-      const result = await this.botService.fetchApi(userInput, page);
-
-      if (result && result !== 'false') {
-        const items = result
-          ? result
-              .split(' \n\n')
-              .map((item) => {
-                if (!item) return;
-
-                const [id, artist, title, url] = item.split(' 123., ');
-
-                return {
-                  id: id,
-                  artist: artist,
-                  title: title,
-                  url: url,
-                };
-              })
-              .filter(Boolean)
-          : [];
-
-        const music_btn = [];
-        const buttonsPerRow = 5;
-
-        for (let index = 0; index < items.length; index += buttonsPerRow) {
-          const rowButtons = items
-            .slice(index, index + buttonsPerRow)
-            .map((item) =>
-              Markup.button.callback(item.id, `action_${item.id}`),
-            );
-
-          music_btn.push(rowButtons);
+    try {
+      if (ctx.message.text) {
+        const userInput = ctx.message.text;
+        const userId = String(ctx.from.id);
+        // Fetch items
+        this.items = await this.botService.retunInfo(userInput, page);
+        if (
+          !this.items ||
+          !Array.isArray(this.items) ||
+          this.items.length === 0
+        ) {
+          await ctx.reply(`<i>${this.unfind}</i>`, {
+            parse_mode: 'HTML',
+          });
+          return;
         }
 
-        if (items.length == 20) {
-          music_btn.push([
-            Markup.button.callback('⬅️', `page_${this.musicListPage - 1}`),
-            Markup.button.callback('➡️', `page_${this.musicListPage + 1}`),
-          ]);
-        }
+        userItemsMap.set(userId, this.items);
+        const listpage = this.musicListPage;
+        const item = this.items;
 
-        const reqMusicList = items
-          .map((item) => `${item.id}. ${item.artist} - ${item.title}`)
-          .join('\n');
+        const [list, btn]: any = await this.botService.pushButton(
+          item,
+          listpage,
+        );
 
-        userItemsMap.set(userId, items);
-
-        ctx.reply(
-          `Quyidagilardan birini tanlang:👇\n${reqMusicList}`,
-          Markup.inlineKeyboard(music_btn),
+        await ctx.reply(
+          `Quyidagilardan birini tanlang:👇\n${list}`,
+          Markup.inlineKeyboard(btn),
         );
       } else {
-        ctx.reply('<i>Afsuski, hech narsa topilmadi.😕</i>', {
+        await ctx.reply('<i>Afsuski, hech narsa topilmadi.😕</i>', {
           parse_mode: 'HTML',
         });
-        return;
       }
+    } catch (error) {
+      await ctx.telegram.sendMessage(
+        this.errLogGroupID,
+        `Error in handleText method: ${error}`,
+      );
+      await ctx.reply(this.errMsg);
     }
   }
 
   @Action(/^action_(\d+)$/)
   async musicAction(ctx: any) {
-    const actionId = ctx.match[1];
-    const userId = String(ctx.from.id);
+    try {
+      const actionId = ctx.match[1];
+      const userId = String(ctx.from.id);
+      const poweredBy = `@gold_shazam_bot orqali olindi`;
 
-    const items = userItemsMap.get(userId);
+      const items = userItemsMap.get(userId);
+      if (!items) return ctx.reply(this.errMsg);
 
-    if (!items)
-      return ctx.reply(
-        `Xato malumot botni qayta yurgazish uchun /start buyrugini bering😊.`,
+      const selectedMusic = items.find((item) => item.id === actionId);
+      if (!selectedMusic) return ctx.reply(this.errMsg);
+
+      ctx.replyWithAudio(selectedMusic.url, {
+        caption: poweredBy,
+      });
+      this.logger.log(
+        `Music sent to user ${userId}: ${selectedMusic.artist} - ${selectedMusic.title}`,
       );
-
-    const selectedMusic = items.find((item) => item.id === actionId);
-    if (!selectedMusic)
-      return ctx.reply(
-        `Siz tanlagan musiqa topilmadi!. Botni qayta yurgazish uchun /start buyrugini bering😊.`,
-      );
-
-    ctx.replyWithAudio(selectedMusic.url, {
-      caption: `Siz izlagan musiqa http://t.me/gold_shazam_bot`,
-    });
+    } catch (error) {
+      this.logger.error('Error in musicAction method:', error.stack);
+      ctx.reply('Xatolik yuz berdi. Iltimos, qaytadan urining.');
+    }
   }
 
   @Action(/^page_(\d+)$/)
   async pageAction(ctx: any) {
-    const actionId = ctx.match[1];
-    const userId = String(ctx.from.id);
+    try {
+      const actionId = ctx.match[1];
+      const userId = String(ctx.from.id);
 
-    if (actionId == 0) {
-      const message = await ctx.reply("Bu tugmani hozir bosib bo'lmaydi.");
+      if (actionId == 0) {
+        const backbtn0 = "Bu tugmani hozir bosib bo'lmaydi.";
+        const message = await ctx.reply(backbtn0);
 
-      setTimeout(() => {
-        ctx
-          .deleteMessage(message.message_id)
-          .catch((error) => console.log("Xabarni o'chirishda xato:", error));
-      }, 6500);
-      return;
+        setTimeout(() => {
+          ctx
+            .deleteMessage(message.message_id)
+            .catch(
+              async (error) =>
+                await ctx.telegram.sendMessage(
+                  this.errLogGroupID,
+                  `Error in handleText method: ${error}`,
+                ),
+            );
+        }, 6500);
+        this.logger.log(`Page action ${actionId} invalid for user ${userId}`);
+        return;
+      }
+    } catch (error) {
+      await ctx.telegram.sendMessage(
+        this.errLogGroupID,
+        `Error in handleText method: ${error}`,
+      );
+      ctx.reply('Xatolik yuz berdi. Iltimos, qaytadan urining.');
     }
   }
 }

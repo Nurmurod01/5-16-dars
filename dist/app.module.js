@@ -10,10 +10,8 @@ exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const nestjs_telegraf_1 = require("nestjs-telegraf");
 const bot_module_1 = require("./bot/bot.module");
-const LocalSession = require("telegraf-session-local");
 const typeorm_1 = require("@nestjs/typeorm");
 const song_entity_1 = require("./bot/entity/song.entity");
-const sessions = new LocalSession({ database: 'session.db.json' });
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;

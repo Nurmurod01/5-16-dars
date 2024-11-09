@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const song_entity_1 = require("./entity/song.entity");
+const telegraf_1 = require("telegraf");
 let BotService = class BotService {
     constructor(songRepository) {
         this.songRepository = songRepository;
@@ -63,6 +64,53 @@ let BotService = class BotService {
             console.error('Fetch error:', error);
             return undefined;
         }
+    }
+    async retunInfo(userInput, page) {
+        try {
+            const result = await this.fetchApi(userInput, page);
+            if (!result || result === 'false') {
+                return [];
+            }
+            const items = result
+                .split(' \n\n')
+                .map((item) => {
+                if (!item)
+                    return;
+                const [id, artist, title, url] = item.split(' 123., ');
+                return {
+                    id: id,
+                    artist: artist,
+                    title: title,
+                    url: url,
+                };
+            })
+                .filter(Boolean);
+            return items;
+        }
+        catch (error) {
+            console.error('Error in retunInfo method:', error);
+            return [];
+        }
+    }
+    async pushButton(items, musicListPage) {
+        const music_btn = [];
+        const buttonsPerRow = 5;
+        for (let index = 0; index < items.length; index += buttonsPerRow) {
+            const rowButtons = items
+                .slice(index, index + buttonsPerRow)
+                .map((item) => telegraf_1.Markup.button.callback(`${item.id}`, `action_${item.id}`));
+            music_btn.push(rowButtons);
+        }
+        if (items.length == 20) {
+            music_btn.push([
+                telegraf_1.Markup.button.callback('⬅️', `page_${musicListPage - 1}`),
+                telegraf_1.Markup.button.callback('➡️', `page_${musicListPage + 1}`),
+            ]);
+        }
+        const reqMusicList = items
+            .map((item) => `${item.id}. ${item.artist} - ${item.title}`)
+            .join('\n');
+        return [reqMusicList, music_btn];
     }
 };
 exports.BotService = BotService;
